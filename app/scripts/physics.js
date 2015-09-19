@@ -10,9 +10,9 @@ const fixGeometry = require('./lib/fixGeometry');
 const world = new Cannon.World();
 const customObjects = [];
 
-world.gravity.set(0, -10, 0);
+world.gravity.set(0, -9.8, 0);
 world.broadphase = new Cannon.NaiveBroadphase();
-world.solver.iterations = 8;
+world.solver.iterations = 20;
 
 let oldT = 0;
 function animate() {
@@ -24,49 +24,45 @@ function animate() {
 	oldT = t;
 }
 
-// swap y,z
-function swapYZ(v) {
-	return {
-		x: v.x,
-		y: v.y,
-		z: v.z
-	};
-}
+function fromObject({id, mass, damping}) {
 
-function getObject({id, mass}) {
-
-	if (!mass) mass = 0;
 	return fetchJSON('../models/' + id + '.json')
 	.then(scene => {
 
-		const modelBody = new Cannon.Body({ mass });
-
 		const newScene = fixGeometry.parse(scene);
-
-		fixGeometry
-		.getGeomFromScene(newScene)
-		.forEach(({geometry, center}) => {
-
-			// Construct polyhedron
-			const modelPart = new Cannon.ConvexPolyhedron(
-				geometry.vertices.map(v => new Cannon.Vec3(
-					v.x - center[0],
-					v.y - center[1],
-					v.z - center[2]
-				)),
-				geometry.faces.map(f => [f.a, f.b, f.c])
-			);
-
-			modelPart.transformAllPoints(new Cannon.Vec3(center[0], center[1], center[2]));
-
-			// Add to compound
-			modelBody.addShape(modelPart);
-		});
-
-		// Create body
-		// modelBody.quaternion.setFromAxisAngle(new Cannon.Vec3(1, 0, 0), Math.PI / 2);
-		return modelBody;
+		return fromGeometry({geometry: fixGeometry.getGeomFromScene(newScene), mass, damping});
 	});
+}
+
+// data [{geom, center}]
+const l = new THREE.JSONLoader();
+function fromGeometry({geometry, mass}) {
+	if (!mass) mass = 0;
+	const modelBody = new Cannon.Body({ mass });
+
+	geometry.forEach(geometry => {
+
+		geometry = l.parse(geometry).geometry;
+
+		// Construct polyhedron
+		const modelPart = new Cannon.ConvexPolyhedron(
+			geometry.vertices.map(v => new Cannon.Vec3(
+				v.x,
+				v.y,
+				v.z
+			)),
+			geometry.faces.map(f => [f.a, f.b, f.c])
+		);
+
+		// Add to compound
+		modelBody.addShape(modelPart);
+	});
+
+	// modelBody.linearDamping = damping;
+
+	// Create body
+	// modelBody.quaternion.setFromAxisAngle(new Cannon.Vec3(1, 0, 0), Math.PI / 2);
+	return Promise.resolve(modelBody);
 }
 
 // Recieve messages from the client and reply back onthe same port
@@ -86,7 +82,7 @@ self.addEventListener('message', function(event) {
 					event.data.modelData = customObjects.map(p => ({
 
 						// swap y,z for exporting
-						position: swapYZ(p.position),
+						position: p.position,
 						quaternion: p.quaternion,
 						meta: p.meta,
 						id: p.id
@@ -94,27 +90,40 @@ self.addEventListener('message', function(event) {
 					return;
 
 				case 'addObject':
-					return getObject({
+					return fromObject({
 						id: event.data.options.id,
 						mass: event.data.options.mass || 0
 					}).then(body2 => {
-						const p = swapYZ(event.data.options.position);
+						const p = event.data.options.position || {x: 0, y:0, z:0};
 						body2.position.set(p.x, p.y, p.z);
+						body3.linearDamping = event.data.options.damping || 0,
 						event.data.id = body2.id;
 						customObjects.push(body2);
 						body2.meta = event.data.options.meta || {};
 						body2.meta.type = 'genericObject';
 						world.addBody(body2);
-						body2.addEventListener("collide", function() {
-							// console.log("Contact between bodies:",e.contact);
-						});
+					});
+
+				case 'addGeometry':
+					return fromGeometry({
+						geometry: event.data.options.geometry,
+						mass: event.data.options.mass || 0
+					}).then(body3 => {
+						const p = event.data.options.position || {x: 0, y:0, z:0};
+						body3.position.set(p.x, p.y, p.z);
+						body3.linearDamping = event.data.options.damping || 0,
+						event.data.id = body3.id;
+						customObjects.push(body3);
+						body3.meta = event.data.options.meta || {};
+						body3.meta.type = 'genericObject';
+						world.addBody(body3);
 					});
 
 				case 'addPoint':
 					const body1 = new Cannon.Body({
 						mass: event.data.pointOptions.mass,
-						velocity: swapYZ(event.data.pointOptions.velocity),
-						position: swapYZ(event.data.pointOptions.position)
+						velocity: event.data.pointOptions.velocity,
+						position: event.data.pointOptions.position
 					});
 					body1.addShape(new Cannon.Sphere(event.data.pointOptions.radius));
 					world.addBody(body1);

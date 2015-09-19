@@ -8,6 +8,7 @@ module.exports.parse = function (sceneIn) {
 };
 
 // used for populating cannon
+// it bakes on the matrix transform to the vertex
 module.exports.getGeomFromScene = function (scene) {
 	const geoms = [];
 	scene.children.forEach(mesh => {
@@ -17,10 +18,11 @@ module.exports.getGeomFromScene = function (scene) {
 		mesh.updateMatrixWorld();
 		const posMat = new THREE.Matrix4();
 		mesh.matrixWorld.copyPosition(posMat);
+		console.log(posMat.elements);
 		const center = [0, 0, 0];
 		posMat.applyToVector3Array(center);
 		geometry.vertices.map(v => v.applyMatrix4(mesh.matrixWorld));
-		geoms.push({geometry, center});
+		geoms.push(geometry.toJSON().data);
 	});
 	return geoms;
 };

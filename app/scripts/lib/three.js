@@ -11,9 +11,6 @@ if (window.location.protocol !== "https:" && window.location.hostname !== 'local
 }
 
 function MyThree(debug = false){
-	
-	THREE.ImageUtils.loadTexture( "images/Sand_1_Diffuse.png" );
-	THREE.ImageUtils.loadTexture( "images/Sand_1_Normal.png" );
 
 	EventEmitter.call(this);
 
@@ -87,7 +84,6 @@ function MyThree(debug = false){
 
 	this.connectPhysicsToThree = (mesh, physicsMesh) => {
 		threeObjectsConnectedToPhysics[physicsMesh.id] = mesh;
-		scene.add(mesh);
 	};
 
 	this.addSphere = (radius) => {
@@ -135,26 +131,45 @@ function MyThree(debug = false){
 	this.pickObjects = function(root, ...namesIn) {
 
 		const collection = {};
-		const names = new Set(namesIn);
 
-		(function pickObjects(root) {
-			if (root.children) {
-				root.children.forEach(node => {
-					if (names.has(node.name)) {
-						collection[node.name] = node;
-						names.delete(node.name);
-					}
-					if (names.size) {
+		if (namesIn[0].constructor === RegExp) {
+
+			const regex = namesIn[0];
+
+			(function pickObjects(root) {
+				if (root.children) {
+					root.children.forEach(node => {
+						if (regex.exec(node.name)) {
+							collection[node.name] = node;
+						}
 						pickObjects(node);
-					}
-				});
+					});
+				}
+			})(root);
+
+		} else {
+
+			const names = new Set(namesIn);
+
+			(function pickObjects(root) {
+				if (root.children) {
+					root.children.forEach(node => {
+						if (names.has(node.name)) {
+							collection[node.name] = node;
+							names.delete(node.name);
+						}
+						if (names.size) {
+							pickObjects(node);
+						}
+					});
+				}
+			})(root);
+
+			if (names.size) {
+				console.warn('Not all objects found: ' + names.values().next().value + ' missing');
 			}
-		})(root);
-
-		if (names.size) {
-			console.warn('Not all objects found: ' + names.values().next().value + ' missing');
 		}
-
+		
 		return collection;
 	};
 

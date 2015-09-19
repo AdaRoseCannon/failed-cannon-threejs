@@ -1,6 +1,7 @@
 'use strict';
 
 const myWorker = new Worker("./scripts/physics.js");
+const fixGeometry = require('./fixGeometry');
 
 function workerMessage(message) {
 
@@ -47,6 +48,14 @@ class Physics {
 
 	addObject(options) {
 		return workerMessage({action: 'addObject', options});
+	}
+
+	addGeometry(options, ...mesh) {
+
+		options.geometry = fixGeometry.getGeomFromScene({
+			children: mesh
+		});
+		return workerMessage({action: 'addGeometry', options});
 	}
 }
 
